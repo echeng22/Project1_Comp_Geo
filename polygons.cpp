@@ -5,32 +5,32 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <typeinfo>
+#include <stdlib.h>
+#include <time.h>
 
 /*
-Note: Sample files Input1.txt and Input-2.txt do not present vertices in counter-clockwise order, they are in clockwise-order.
-
-If points are in clockwise order, pointInPoly function needs to be modified, as it expect points to be in counter-clockwise order.
+Need to increase stack limit in order to run recursive flood fill algorithm. On linux, can be done with ulimit -s 32000.
 */
 
 using namespace std;
 using namespace cv;
 
-void drawLines(Mat canvas, int x0, int y0, int x1, int y1);
+void drawLines(Mat canvas, int x0, int y0, int x1, int y1, Vec3b color);
 Point convertToOctant0(int octant, int x, int y);
 Point convertFromOctant0(int octant, int x, int y);
 int findOctant(int x0, int y0, int x1, int y1);
-void drawPolygons(Mat canvas, std::vector<Point> pointList);
+void drawPolygons(Mat canvas, std::vector<Point> pointList, Vec3b color);
 int pointInPoly(std::vector<Point> pointList, int x, int y);
 void fillPolygons(Mat canvas, std::vector<Point> pointList, Vec3b color);
 int minX(std::vector<Point> pointList);
 int maxX(std::vector<Point> pointList);
 int minY(std::vector<Point> pointList);
 int maxY(std::vector<Point> pointList);
-
+void fill(Mat canvas, std::vector<Point> pointList, int x, int y, Vec3b color);
 
 struct polygon{
     vector<Point> coords;
-    Vec3b color; //Default color will be (255,255,255).
+    Vec3b color; //Default color will be (255,255,255) (White).
 };
 
 std::vector<polygon> readPolygonList(string fname);
@@ -48,11 +48,23 @@ int main(int argc, char** argv )
 
     std::vector<polygon> shapeList = readPolygonList(argv[1]);
     std::vector<Point> pointList;
+    Vec3b color;
     for(int i = 0; i < shapeList.size(); i++)
     {
+        cout <<i<<endl;
         pointList = shapeList.at(i).coords;
-        drawPolygons(canvas, pointList);
+        cout <<"Size: "<<pointList.size()<<endl;
+        color = shapeList.at(i).color;
+        cout <<"test2"<<endl;
+        drawPolygons(canvas, pointList, color);
         imshow("Display Image", canvas);
+        waitKey(0);
+        cout <<"test3"<<endl;
+        fillPolygons(canvas, pointList, color);
+        cout <<"test4"<<endl;
+        imshow("Display Image", canvas);
+        waitKey(0);
+        cout <<"test5"<<endl;
     }
     imshow("Display Image", canvas);
     waitKey(0);
@@ -81,7 +93,7 @@ std::vector<polygon> readPolygonList(string fname)
             }
             polygon P1;
             P1.coords = polyshape;
-            P1.color = Vec3b(255,255,255);
+            P1.color = Vec3b(0,255,0);
             polyInfo.push_back(P1);
             file.close();
             return polyInfo;
@@ -123,7 +135,6 @@ std::vector<polygon> readPolygonList(string fname)
                 std::istringstream point2(line);
                 point2 >> c1 >> x >> c2 >> y >> c3;
                 polyshape2.push_back(Point(x,y));
-                getline(file, line);
             }
             P2.coords = polyshape2;
             polyInfo.push_back(P2);
@@ -134,7 +145,7 @@ std::vector<polygon> readPolygonList(string fname)
 }
 
 
-void drawPolygons(Mat canvas, std::vector<Point> pointList)
+void drawPolygons(Mat canvas, std::vector<Point> pointList, Vec3b color)
 {
     std::vector<Point> pList = pointList;
     int size = pointList.size();
@@ -146,15 +157,14 @@ void drawPolygons(Mat canvas, std::vector<Point> pointList)
         second = pList.at(i+1);
         //cout << "First " << first.x << ", " << first.y << endl;
         //cout << "Second " << second.x << ", " << second.y << endl << endl;
-        drawLines(canvas, first.x, first.y, second.x, second.y);
+        drawLines(canvas, first.x, first.y, second.x, second.y, color);
     }
-    drawLines(canvas,second.x, second.y, pList.at(0).x, pList.at(0).y);
+    drawLines(canvas,second.x, second.y, pList.at(0).x, pList.at(0).y, color);
 }
 
 
-void drawLines(Mat canvas, int x0, int y0, int x1, int y1)
+void drawLines(Mat canvas, int x0, int y0, int x1, int y1, Vec3b color)
 {
-    imshow("Display Image", canvas);
     // Use Bresenham's Line Algorithm
     int oct_val = findOctant(x0,y0,x1,y1);
     if (oct_val == -1)
@@ -315,28 +325,80 @@ int newfindOctant(int x0, int y0, int x1, int y1)
 int pointInPoly(std::vector<Point> pointList, int x, int y)
 {
     int value;
-    for(int i = 0; i < pointList.size() - 1; i++)
+    if(x < 0 || x > 1000 || y < 0 || y > 1000)
     {
-        int x0 = pointList.at(i).x;
-        int y0 = pointList.at(i).y;
-        int x1 = pointList.at(i + 1).x;
-        int y1 = pointList.at(i + 1).y;
+        printf("Invalid Point. Error!\n");
+        return -1; //Point is outside of canvas. Invalid Point.
+    }
+    for(int i = 0; i < pointList.size(); i++)
+    {
+        int x0, y0, x1, y1;
+        if(i == pointList.size() - 1)
+        {
+            x0 = pointList.at(i).x;
+            y0 = pointList.at(i).y;
+            x1 = pointList.at(0).x;
+            y1 = pointList.at(0).y;
+        }
+        else
+        {
+            x0 = pointList.at(i).x;
+            y0 = pointList.at(i).y;
+            x1 = pointList.at(i + 1).x;
+            y1 = pointList.at(i + 1).y;
+        }
         value = (x1 - x0) * (y - y0) - (x - x0) * (y1 - y0);
         if(value == 0)
         {
             return 0; //On the boundary
         }
-        else if(value > 0)
+        else if(value < 0)
         {
-            return -1;//Left side of line; outside polygon.
+            return -1;//Right side of line; outside polygon.
         }
     }
-    return 1; //Point is on the right side of every line in polygon; Point is inside polygon.
+    return 1; //Point is on the left side of every line in polygon; Point is inside polygon.
 }
 
 void fillPolygons(Mat canvas, std::vector<Point> pointList, Vec3b color)
 {
+    int min_x = minX(pointList);
+    int max_x = maxX(pointList);
+    int min_y = minY(pointList);
+    int max_y = minY(pointList);
+    int randx = 500;
+    int randy = 500;
+    srand(time(NULL));
+    while(pointInPoly(pointList, randx, randy) != 1)
+    {
+        cout<<"test error"<<endl;
+        randx = rand() % min_x + (max_x - min_x);
+        randy = rand() % min_x + (max_x - min_x);
+    }
+    fill(canvas, pointList, randx, randy, color);
+}
 
+void fill(Mat canvas, std::vector<Point> pointList, int x, int y, Vec3b color)
+{
+    int side = pointInPoly(pointList, x, y);
+    //cout << "X: "<<x<<"Y: "<<y<<endl;
+    //imshow("display image", canvas);
+    //waitKey(1);
+    Vec3b pointColor = canvas.at<Vec3b>(Point(x, y));
+    //cout <<"test1"<<endl;
+    if(side == 0 || side == -1 || pointColor == color)
+    {
+        //cout <<"test3"<<endl;
+        return;
+    }
+    else
+    {
+        canvas.at<Vec3b>(Point(x, y)) = color;
+        fill(canvas, pointList, x, y - 1, color);
+        fill(canvas, pointList, x, y + 1, color);
+        fill(canvas, pointList, x + 1, y, color);
+        fill(canvas, pointList, x - 1, y, color);
+    }
 }
 
 int minX(std::vector<Point> pointList)
