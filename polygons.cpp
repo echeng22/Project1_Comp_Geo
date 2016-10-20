@@ -15,11 +15,11 @@ Need to increase stack limit in order to run recursive flood fill algorithm. On 
 using namespace std;
 using namespace cv;
 
-void drawLines(Mat canvas, int x0, int y0, int x1, int y1, Vec3b color);
+void drawLines(Mat canvas, int x0, int y0, int x1, int y1);
 Point convertToOctant0(int octant, int x, int y);
 Point convertFromOctant0(int octant, int x, int y);
 int findOctant(int x0, int y0, int x1, int y1);
-void drawPolygons(Mat canvas, std::vector<Point> pointList, Vec3b color);
+void drawPolygons(Mat canvas, std::vector<Point> pointList);
 int pointInPoly(std::vector<Point> pointList, int x, int y);
 void fillPolygons(Mat canvas, std::vector<Point> pointList, Vec3b color);
 int minX(std::vector<Point> pointList);
@@ -30,9 +30,10 @@ void fill(Mat canvas, std::vector<Point> pointList, int x, int y, Vec3b color);
 
 struct polygon{
     vector<Point> coords;
-    Vec3b color; //Default color will be (255,255,255) (White).
+    Vec3b color; //Default color will be (0,255,0) (Green).
 };
 
+int determineUnion(std::vector<polygon> shapeList);
 std::vector<polygon> readPolygonList(string fname);
 
 
@@ -51,23 +52,54 @@ int main(int argc, char** argv )
     Vec3b color;
     for(int i = 0; i < shapeList.size(); i++)
     {
-        cout <<i<<endl;
         pointList = shapeList.at(i).coords;
-        cout <<"Size: "<<pointList.size()<<endl;
         color = shapeList.at(i).color;
-        cout <<"test2"<<endl;
-        drawPolygons(canvas, pointList, color);
+        drawPolygons(canvas, pointList);
         imshow("Display Image", canvas);
         waitKey(0);
-        cout <<"test3"<<endl;
-        fillPolygons(canvas, pointList, color);
-        cout <<"test4"<<endl;
-        imshow("Display Image", canvas);
-        waitKey(0);
-        cout <<"test5"<<endl;
     }
-    imshow("Display Image", canvas);
-    waitKey(0);
+    if (shapeList.size() == 2)
+    {
+        int minX1 = minX(shapeList.at(0).coords);
+        int minX2 = minX(shapeList.at(1).coords);
+        if (minX1 < minX2)
+        {
+            fillPolygons(canvas, shapeList.at(1).coords, shapeList.at(1).color);
+            fillPolygons(canvas, shapeList.at(0).coords, shapeList.at(0).color);
+            imshow("Display Image", canvas);
+            waitKey(0);
+        }
+        else
+        {
+            fillPolygons(canvas, shapeList.at(0).coords, shapeList.at(0).color);
+            fillPolygons(canvas, shapeList.at(1).coords, shapeList.at(1).color);
+            imshow("Display Image", canvas);
+            waitKey(0);
+
+        }
+        if(determineUnion(shapeList) == 1)
+        {
+            Mat unioncanvas(1000, 1000, CV_8UC3, Scalar::all(0)); //Color is in BGR format
+            drawPolygons(unioncanvas, shapeList.at(0).coords);
+            drawPolygons(unioncanvas, shapeList.at(1).coords);
+            fillPolygons(unioncanvas, shapeList.at(0).coords, Vec3b(0,0,255));
+            fillPolygons(unioncanvas, shapeList.at(1).coords, Vec3b(0,0,255));
+            imshow("Union Image", unioncanvas);
+            waitKey(0);
+        }
+        else
+        {
+            cout<<"No Union between Polygons!"<<endl;
+        }
+
+    }
+    else
+    {
+            fillPolygons(canvas, shapeList.at(0).coords, shapeList.at(0).color);
+            imshow("Display Image", canvas);
+            waitKey(0);
+    }
+
     return 0;
 }
 
@@ -145,7 +177,7 @@ std::vector<polygon> readPolygonList(string fname)
 }
 
 
-void drawPolygons(Mat canvas, std::vector<Point> pointList, Vec3b color)
+void drawPolygons(Mat canvas, std::vector<Point> pointList)
 {
     std::vector<Point> pList = pointList;
     int size = pointList.size();
@@ -157,13 +189,13 @@ void drawPolygons(Mat canvas, std::vector<Point> pointList, Vec3b color)
         second = pList.at(i+1);
         //cout << "First " << first.x << ", " << first.y << endl;
         //cout << "Second " << second.x << ", " << second.y << endl << endl;
-        drawLines(canvas, first.x, first.y, second.x, second.y, color);
+        drawLines(canvas, first.x, first.y, second.x, second.y);
     }
-    drawLines(canvas,second.x, second.y, pList.at(0).x, pList.at(0).y, color);
+    drawLines(canvas,second.x, second.y, pList.at(0).x, pList.at(0).y);
 }
 
 
-void drawLines(Mat canvas, int x0, int y0, int x1, int y1, Vec3b color)
+void drawLines(Mat canvas, int x0, int y0, int x1, int y1)
 {
     // Use Bresenham's Line Algorithm
     int oct_val = findOctant(x0,y0,x1,y1);
@@ -365,15 +397,15 @@ void fillPolygons(Mat canvas, std::vector<Point> pointList, Vec3b color)
     int min_x = minX(pointList);
     int max_x = maxX(pointList);
     int min_y = minY(pointList);
-    int max_y = minY(pointList);
-    int randx = 500;
-    int randy = 500;
+    int max_y = maxY(pointList);
+    int randx = rand() % min_x + (max_x - min_x);
+    int randy = rand() % min_y + (max_y - min_y);
     srand(time(NULL));
     while(pointInPoly(pointList, randx, randy) != 1)
     {
-        cout<<"test error"<<endl;
+        srand(time(NULL));
         randx = rand() % min_x + (max_x - min_x);
-        randy = rand() % min_x + (max_x - min_x);
+        randy = rand() % min_y + (max_y - min_y);
     }
     fill(canvas, pointList, randx, randy, color);
 }
@@ -457,6 +489,28 @@ int maxY(std::vector<Point> pointList)
     return largest;
 }
 
+int determineUnion(std::vector<polygon> shapeList)
+{
+    polygon P1 = shapeList.at(0);
+    polygon P2 = shapeList.at(1);
+    std::vector<Point> pointList1 = P1.coords;
+    std::vector<Point> pointList2 = P2.coords;
+    int min_X = minX(pointList1);
+    int max_X = maxX(pointList1);
+    int min_Y = minY(pointList1);
+    int max_Y = maxY(pointList1);
+    for(int i = min_X; i <= max_X; i++)
+    {
+        for(int j = min_Y; j <= max_Y; j++)
+        {
+            if(pointInPoly(pointList2, i,j) == 1 && pointInPoly(pointList1, i,j) == 1)
+            {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
 
 
 /*
