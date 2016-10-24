@@ -77,6 +77,7 @@ int main(int argc, char** argv )
             waitKey(0);
 
         }
+
         if(determineUnion(shapeList) == 1)
         {
             Mat unioncanvas(1000, 1000, CV_8UC3, Scalar::all(0)); //Color is in BGR format
@@ -204,7 +205,7 @@ void drawLines(Mat canvas, int x0, int y0, int x1, int y1)
         cout << "Negative octant value. Error Occurred!";
         return;
     }
-
+    cout<<"Octant: "<<oct_val<<endl;
     Point first = convertToOctant0(oct_val, x0,y0);
     Point second = convertToOctant0(oct_val, x1,y1);
 
